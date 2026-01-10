@@ -489,6 +489,436 @@ class AgencyPromotionController extends Controller
 	public function subordinate_data(Request $request) 
 {
     try {
+
+        /* ================= VALIDATION ================= */
+        $validator = Validator::make($request->all(), [
+            'id' => 'required|integer',
+            'tier' => 'nullable|integer|min:0',
+            'created_at' => 'nullable|date',
+            'u_id' => 'nullable|string'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 400,
+                'message' => $validator->errors()->first()
+            ], 400);
+        }
+
+        /* ================= INPUT ================= */
+        $userId   = $request->id;
+        $tier     = $request->tier ?? 0;
+        $searchUid = $request->u_id;
+
+        $date = $request->created_at
+            ? Carbon::parse($request->created_at)
+            : Carbon::now();
+
+        $start = $date->format('Y-m-d 00:00:00');
+        $end   = $date->format('Y-m-d 23:59:59');
+        $filterDate = $date->format('Y-m-d');
+
+        /* ================= BUILD MLM TREE ================= */
+        $subordinateLevels = [];
+        $currentIds = [$userId];
+        $level = 1;
+
+        while (!empty($currentIds)) {
+
+            if ($tier > 0 && $level > $tier) break;
+
+            $nextIds = User::whereIn('referral_user_id', $currentIds)
+                ->where('account_type', 0)
+                ->pluck('id')
+                ->toArray();
+
+            foreach ($nextIds as $uid) {
+                if (!isset($subordinateLevels[$uid])) {
+                    $subordinateLevels[$uid] = $level;
+                }
+            }
+
+            $currentIds = $nextIds;
+            $level++;
+        }
+
+        if (empty($subordinateLevels)) {
+            return response()->json([
+                'status' => 200,
+                'message' => 'No subordinates found',
+                'data' => [
+                    'number_of_deposit' => 0,
+                    'payin_amount' => 0,
+                    'number_of_bettor' => 0,
+                    'bet_amount' => 0,
+                    'first_deposit' => 0,
+                    'first_deposit_amount' => 0,
+                    'subordinates_data' => [],
+                    'date_filter' => $filterDate,
+                    'tier_filter' => $tier
+                ]
+            ]);
+        }
+
+        /* ================= UID FILTER ================= */
+        if ($searchUid) {
+            $validIds = User::whereIn('id', array_keys($subordinateLevels))
+                ->where('u_id', 'like', $searchUid . '%')
+                ->pluck('id')->toArray();
+
+            $subordinateLevels = array_intersect_key(
+                $subordinateLevels,
+                array_flip($validIds)
+            );
+        }
+
+        if (empty($subordinateLevels)) {
+            return response()->json([
+                'status' => 200,
+                'message' => 'No data found for the specified UID',
+                'data' => [
+                    'number_of_deposit' => 0,
+                    'payin_amount' => 0,
+                    'number_of_bettor' => 0,
+                    'bet_amount' => 0,
+                    'first_deposit' => 0,
+                    'first_deposit_amount' => 0,
+                    'subordinates_data' => [],
+                    'date_filter' => $filterDate,
+                    'tier_filter' => $tier
+                ]
+            ]);
+        }
+
+        $subordinateIds = array_keys($subordinateLevels);
+
+        /* ================= LEVEL CASE ================= */
+        $levelCase = "CASE users.id ";
+        foreach ($subordinateLevels as $id => $lvl) {
+            $levelCase .= "WHEN {$id} THEN {$lvl} ";
+        }
+        $levelCase .= "END AS level";
+
+        /* ================= MAIN QUERY ================= */
+        $subordinatesData = DB::table('users')
+            ->leftJoin('mlm_levels', 'users.role_id', '=', 'mlm_levels.id')
+
+            ->leftJoin(DB::raw("
+                (
+                    SELECT userid, SUM(amount) total_bet
+                    FROM bets
+                    WHERE created_at BETWEEN '{$start}' AND '{$end}'
+                    GROUP BY userid
+                ) bet_data
+            "), 'users.id', '=', 'bet_data.userid')
+
+            ->leftJoin(DB::raw("
+                (
+                    SELECT user_id, SUM(cash) total_payin, COUNT(*) deposit_count
+                    FROM payins
+                    WHERE status = 2
+                    AND created_at BETWEEN '{$start}' AND '{$end}'
+                    GROUP BY user_id
+                ) payin_data
+            "), 'users.id', '=', 'payin_data.user_id')
+
+            ->leftJoin(DB::raw("
+                (
+                    SELECT p1.user_id,
+                           COUNT(*) total_first_recharge,
+                           SUM(p1.cash) total_first_deposit_amount
+                    FROM payins p1
+                    WHERE p1.status = 2
+                    AND p1.created_at BETWEEN '{$start}' AND '{$end}'
+                    AND p1.created_at = (
+                        SELECT MIN(p2.created_at)
+                        FROM payins p2
+                        WHERE p2.user_id = p1.user_id
+                        AND p2.status = 2
+                    )
+                    GROUP BY p1.user_id
+                ) first_deposit_data
+            "), 'users.id', '=', 'first_deposit_data.user_id')
+
+            ->whereIn('users.id', $subordinateIds)
+
+            ->select(
+                'users.id',
+                'users.u_id',
+                DB::raw($levelCase),
+                DB::raw('COALESCE(bet_data.total_bet,0) as bet_amount'),
+                DB::raw('COALESCE(payin_data.total_payin,0) as payin_amount'),
+                DB::raw('COALESCE(payin_data.deposit_count,0) as number_of_deposit'),
+                DB::raw('(COALESCE(bet_data.total_bet,0) * COALESCE(mlm_levels.commission,0))/100 as commission'),
+                DB::raw('COALESCE(first_deposit_data.total_first_recharge,0) as total_first_recharge'),
+                DB::raw('COALESCE(first_deposit_data.total_first_deposit_amount,0) as total_first_deposit_amount')
+            )
+
+            /* ACTIVE USERS FIRST */
+            ->orderByRaw("
+                CASE
+                    WHEN COALESCE(bet_data.total_bet,0) > 0
+                    OR COALESCE(payin_data.total_payin,0) > 0
+                    THEN 0 ELSE 1
+                END
+            ")
+            ->orderBy('level')
+            ->get();
+
+        /* ================= RESPONSE FORMAT ================= */
+        $result = [
+            'number_of_deposit' => 0,
+            'payin_amount' => 0,
+            'number_of_bettor' => 0,
+            'bet_amount' => 0,
+            'first_deposit' => 0,
+            'first_deposit_amount' => 0,
+            'subordinates_data' => [],
+            'date_filter' => $filterDate,
+            'tier_filter' => $tier
+        ];
+
+        foreach ($subordinatesData as $user) {
+
+            $result['bet_amount'] += $user->bet_amount;
+            $result['payin_amount'] += $user->payin_amount;
+            $result['number_of_deposit'] += $user->number_of_deposit;
+            $result['first_deposit'] += $user->total_first_recharge;
+            $result['first_deposit_amount'] += $user->total_first_deposit_amount;
+
+            if ($user->bet_amount > 0) {
+                $result['number_of_bettor']++;
+            }
+
+            $result['subordinates_data'][] = [
+                'id' => $user->id,
+                'u_id' => $user->u_id,
+                'level' => $user->level,
+                'bet_amount' => $user->bet_amount,
+                'payin_amount' => $user->payin_amount,
+                'number_of_deposit' => $user->number_of_deposit,
+                'commission' => $user->commission,
+                'first_deposit' => $user->total_first_recharge,
+                'first_deposit_amount' => $user->total_first_deposit_amount
+            ];
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Data fetched successfully',
+            'data' => $result
+        ]);
+
+    } catch (\Throwable $e) {
+        return response()->json([
+            'status' => 500,
+            'error' => $e->getMessage()
+        ]);
+    }
+}
+	
+public function subordinate_data_07_01_2026_recent(Request $request)
+{
+    try {
+
+        /* ===========================
+           1. VALIDATION
+        =========================== */
+        $request->validate([
+            'id' => 'required|integer|exists:users,id',
+            'tier' => 'nullable|integer|min:1',
+            'created_at' => 'nullable|date',
+            'u_id' => 'nullable|string'
+        ]);
+
+        $userId = $request->id;
+        $tier = $request->tier;
+        $searchUid = $request->u_id;
+
+        $date = $request->created_at
+            ? Carbon::parse($request->created_at)
+            : Carbon::now();
+
+        $start = $date->format('Y-m-d 00:00:00');
+        $end   = $date->format('Y-m-d 23:59:59');
+
+        /* ===========================
+           2. BUILD SUBORDINATE TREE
+           (NO EXTRA TABLE)
+        =========================== */
+        $levels = [];
+        $current = [$userId];
+        $level = 1;
+
+        while (!empty($current)) {
+
+            if ($tier && $level > $tier) break;
+
+            $next = User::whereIn('referral_user_id', $current)
+                ->where('account_type', 0)
+                ->pluck('id')
+                ->toArray();
+
+            foreach ($next as $uid) {
+                if (!isset($levels[$uid])) {
+                    $levels[$uid] = $level;
+                }
+            }
+
+            $current = $next;
+            $level++;
+        }
+
+        if (empty($levels)) {
+            return response()->json(['status'=>200,'data'=>[]]);
+        }
+
+        /* ===========================
+           3. FILTER BY UID
+        =========================== */
+        if ($searchUid) {
+            $valid = User::whereIn('id', array_keys($levels))
+                ->where('u_id','like',$searchUid.'%')
+                ->pluck('id')->toArray();
+
+            $levels = array_intersect_key($levels, array_flip($valid));
+        }
+
+        if (empty($levels)) {
+            return response()->json(['status'=>200,'data'=>[]]);
+        }
+
+        $ids = array_keys($levels);
+
+        /* ===========================
+           4. LEVEL CASE
+        =========================== */
+        $case = "CASE users.id ";
+        foreach ($levels as $id=>$lvl) {
+            $case .= "WHEN {$id} THEN {$lvl} ";
+        }
+        $case .= "END AS level";
+
+        /* ===========================
+           5. MAIN QUERY (OPTIMIZED)
+        =========================== */
+        $rows = DB::table('users')
+            ->leftJoin('mlm_levels','users.role_id','=','mlm_levels.id')
+
+            ->leftJoin(DB::raw("
+                (
+                    SELECT userid,
+                           SUM(amount) bet_amount
+                    FROM bets
+                    WHERE created_at BETWEEN '{$start}' AND '{$end}'
+                    GROUP BY userid
+                ) b
+            "), 'users.id','=','b.userid')
+
+            ->leftJoin(DB::raw("
+                (
+                    SELECT user_id,
+                           SUM(cash) payin_amount,
+                           COUNT(*) deposit_count
+                    FROM payins
+                    WHERE status=2
+                    AND created_at BETWEEN '{$start}' AND '{$end}'
+                    GROUP BY user_id
+                ) p
+            "), 'users.id','=','p.user_id')
+
+            ->leftJoin(DB::raw("
+                (
+                    SELECT p1.user_id,
+                           COUNT(*) first_deposit_count,
+                           SUM(p1.cash) first_deposit_amount
+                    FROM payins p1
+                    WHERE p1.status=2
+                    AND p1.created_at BETWEEN '{$start}' AND '{$end}'
+                    AND p1.created_at = (
+                        SELECT MIN(p2.created_at)
+                        FROM payins p2
+                        WHERE p2.user_id = p1.user_id
+                        AND p2.status=2
+                    )
+                    GROUP BY p1.user_id
+                ) fd
+            "), 'users.id','=','fd.user_id')
+
+            ->whereIn('users.id',$ids)
+
+            ->select(
+                'users.id',
+                'users.u_id',
+                DB::raw($case),
+                DB::raw('COALESCE(b.bet_amount,0) bet_amount'),
+                DB::raw('COALESCE(p.payin_amount,0) payin_amount'),
+                DB::raw('COALESCE(p.deposit_count,0) number_of_deposit'),
+                DB::raw('COALESCE(fd.first_deposit_amount,0) first_deposit_amount'),
+                DB::raw('COALESCE(fd.first_deposit_count,0) first_deposit_count'),
+                DB::raw('(COALESCE(b.bet_amount,0) * COALESCE(mlm_levels.commission,0))/100 commission')
+            )
+
+            /* ===========================
+               6. ACTIVE USERS FIRST
+            =========================== */
+            ->orderByRaw("
+                CASE
+                    WHEN COALESCE(b.bet_amount,0) > 0
+                    OR COALESCE(p.payin_amount,0) > 0
+                    THEN 0 ELSE 1
+                END
+            ")
+            ->orderBy('level')
+            ->get();
+
+        /* ===========================
+           7. FINAL TOTALS
+        =========================== */
+        $result = [
+            'bet_amount' => 0,
+            'payin_amount' => 0,
+            'number_of_deposit' => 0,
+            'number_of_bettor' => 0,
+            'first_deposit_amount' => 0,
+            'first_deposit_count' => 0,
+            'subordinates_data' => []
+        ];
+
+        foreach ($rows as $r) {
+
+            $result['bet_amount'] += $r->bet_amount;
+            $result['payin_amount'] += $r->payin_amount;
+            $result['number_of_deposit'] += $r->number_of_deposit;
+            $result['first_deposit_amount'] += $r->first_deposit_amount;
+            $result['first_deposit_count'] += $r->first_deposit_count;
+
+            if ($r->bet_amount > 0) {
+                $result['number_of_bettor']++;
+            }
+
+            $result['subordinates_data'][] = $r;
+        }
+
+        return response()->json([
+            'status'=>200,
+            'message'=>'Data loaded successfully',
+            'data'=>$result
+        ]);
+
+    } catch (\Throwable $e) {
+        return response()->json([
+            'status'=>500,
+            'error'=>$e->getMessage()
+        ]);
+    }
+}
+
+
+	
+	public function subordinate_data_07_01_2026(Request $request) 
+{
+    try {
         // Step 1: Validate input
         $validator = Validator::make($request->all(), [
             'id' => 'required|integer',

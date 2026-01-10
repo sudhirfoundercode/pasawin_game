@@ -995,7 +995,7 @@ public function bappa_venture(Request $request)
     }
 
     /* ================= PAYIN ================= */
-    $redirect_url = env('APP_URL') . "api/checkPayment?order_id=$orderid";
+    $redirect_url =  "https://root.pasawin.com/api/checkPayment?order_id=$orderid";
 
     DB::table('payins')->insert([
         'user_id'      => $userid,
@@ -1016,13 +1016,13 @@ public function bappa_venture(Request $request)
         'orderid'      => $orderid,
         'amount'       => $cash,
         'name'         => $user->u_id,
-        'email'        => 'abc@gmail.com',
-        'mobile'       => '9999999999',
+        'email'        => $user->email,
+        'mobile'       => $user->mobile,
         'remark'       => 'payIn',
         'type'         => 1,
         'redirect_url' => $redirect_url
     ];
-
+	
     $curl = curl_init();
     curl_setopt_array($curl, [
         CURLOPT_URL            => 'https://bappaventures.com/api/paynow',

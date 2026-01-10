@@ -19,15 +19,15 @@ class GameApiController extends Controller
      {
          $date = now()->format('Ymd');
              // wingo
-             $gamesNo1 = $date . "01" . "0001";
-     		$gamesNo2 = $date . "02" . "0001";
-     		$gamesNo3 = $date . "03" . "0001";
-     		$gamesNo4 = $date . "04" . "0001";
+             $gamesNo1 = $date . "01" . "001";
+     		$gamesNo2 = $date . "02" . "001";
+     		$gamesNo3 = $date . "03" . "001";
+     		$gamesNo4 = $date . "04" . "001";
      		// trx
-     		$gamesNo6 = $date . "06" . "0001";
-     		$gamesNo7 = $date . "07" . "0001";
-     		$gamesNo8 = $date . "08" . "0001";
-     		$gamesNo9 = $date . "09" . "0001";
+     		$gamesNo6 = $date . "06" . "001";
+     		$gamesNo7 = $date . "07" . "001";
+     		$gamesNo8 = $date . "08" . "001";
+     		$gamesNo9 = $date . "09" . "001";
      		// D & T
      		$gamesNo10 = $date . "10" . "0001";
 		 	 $gamesNo11 = $date . "11" . "0001";
@@ -395,12 +395,21 @@ class GameApiController extends Controller
     ]);
 
     // Step 8: Update Bet Logs
-    foreach ($virtualGames as $game) {
-        Betlog::where('game_id', $request->game_id)
-            ->where('number', $game->actual_number)
-            ->increment('amount', $amount);
-    }
+    //foreach ($virtualGames as $game) {
+       // Betlog::where('game_id', $request->game_id)
+          //  ->where('number', $game->actual_number)
+         //   ->increment('amount', $amount);
+   // }
+		foreach ($virtualGames as $game) {
+    $query = Betlog::where('game_id', $request->game_id)
+        ->where('number', $game->actual_number);
 
+    $query->increment('amount', $amount);
+    $query->increment('multiplier_amount', $amount * $game->multiplier);
+}
+
+
+		 //->increment('amount', $amount * $game->multiplier);
     // Step 9: Deduct User Balance
     $recharge = $user->recharge;
 
@@ -1025,83 +1034,7 @@ public function cron_with_pattern($game_id)
         $this->jhandimunda($game_id, $period, $result);
     }
 }
-	public function cron($game_id)
-{
-    // 1️⃣ Winning percentage (future use safe)
-    $percentage = DB::table('game_settings')
-        ->where('id', $game_id)
-        ->value('winning_percentage');
-
-    // 2️⃣ Current period
-    $betlog = DB::table('betlogs')
-        ->where('game_id', $game_id)
-        ->first();
-
-    if (!$betlog) return;
-
-    $period = $betlog->games_no;
-
-    // 3️⃣ Total bet amount
-    $totalamount = DB::table('bets')
-        ->where('game_id', $game_id)
-        ->where('games_no', $period)
-        ->sum('amount');
-
-    // 4️⃣ Admin winner (top priority)
-    $adminWinner = DB::table('admin_winner_results')
-        ->where('gameId', $game_id)
-        ->where('gamesno', $period)
-        ->latest('id')
-        ->first();
-
-    if ($adminWinner) {
-        $result = $adminWinner->number;
-    } 
-    else {
-
-        // 🔹 Fetch betlogs once
-        $betlogs = DB::table('betlogs')
-            ->where('game_id', $game_id)
-            ->where('games_no', $period)
-            ->get();
-
-        if ($betlogs->isEmpty()) return;
-
-        // 🔹 Find minimum amount
-        $minAmount = $betlogs->min('amount');
-
-        // 🔹 All numbers having minimum amount
-        $minAmountNumbers = $betlogs
-            ->where('amount', $minAmount)
-            ->pluck('number')
-            ->toArray();
-
-        // 5️⃣ Total bet < 450 → RANDOM among least exposure
-        if ($totalamount < 450) {
-            $result = $minAmountNumbers[array_rand($minAmountNumbers)];
-        } 
-        else {
-            // 6️⃣ Total bet ≥ 450
-            // Zero bet exists? (minAmount == 0)
-            if ($minAmount == 0) {
-                $result = $minAmountNumbers[array_rand($minAmountNumbers)];
-            } 
-            else {
-                // Least amount winner
-                $result = $minAmountNumbers[0];
-            }
-        }
-    }
-
-    // 7️⃣ Declare result
-    if (in_array($game_id, [1,2,3,4])) {
-        $this->colour_prediction_and_bingo($game_id, $period, $result);
-    } 
-    elseif (in_array($game_id, [6,7,8,9])) {
-        $this->trx($game_id, $period, $result);
-    } 
-}
-
+	
 	
 	public function cron_06_01_2026($game_id)
 {
@@ -1173,7 +1106,249 @@ public function cron_with_pattern($game_id)
     
 }
 	
+	public function cron_10_01_2026($game_id)
+{
+    // 1️⃣ Winning percentage (future use safe)
+    $percentage = DB::table('game_settings')
+        ->where('id', $game_id)
+        ->value('winning_percentage');
+
+    // 2️⃣ Current period
+    $betlog = DB::table('betlogs')
+        ->where('game_id', $game_id)
+        ->first();
+//dd($betlog);
+    if (!$betlog) return;
+
+    $period = $betlog->games_no;
+
+    // 3️⃣ Total bet amount
+    $totalamount = DB::table('bets')
+        ->where('game_id', $game_id)
+        ->where('games_no', $period)
+        ->sum('amount');
+//dd($totalamount);
+    // 4️⃣ Admin winner (top priority)
+    $adminWinner = DB::table('admin_winner_results')
+        ->where('gameId', $game_id)
+        ->where('gamesno', $period)
+        ->latest('id')
+        ->first();
+
+    if ($adminWinner) {
+        $result = $adminWinner->number;
+    } 
+    else {
+
+        // 🔹 Fetch betlogs once
+        $betlogs = DB::table('betlogs')
+            ->where('game_id', $game_id)
+            ->where('games_no', $period)
+            ->get();
+
+        if ($betlogs->isEmpty()) return;
+
+        // 🔹 Find minimum amount
+        //$minAmount = $betlogs->min('amount');
+		$minAmount = $betlogs
+    ->where('amount', '>', 0)   // 👈 sirf 0 se bade amount
+    ->min('amount');
+
+//dd($minAmount);
+        // 🔹 All numbers having minimum amount
+        //$minAmountNumbers = $betlogs
+            //->where('amount', $minAmount)
+           // ->pluck('number')
+           // ->toArray();
+		
+		$minAmountNumbers = $betlogs
+    ->where('amount', '>', 0)      // 👈 zero ya negative remove
+    ->where('amount', $minAmount)  // 👈 sirf minimum amount wale
+    ->pluck('number')
+    ->toArray();
+
+
+        // 5️⃣ Total bet < 450 → RANDOM among least exposure
+        if ($totalamount < 450) {
+            $result = $minAmountNumbers[array_rand($minAmountNumbers)];
+			//dd($result);
+        } 
+        else {
+            // 6️⃣ Total bet ≥ 450
+            // Zero bet exists? (minAmount == 0)
+            if ($minAmount == 0) {
+                $result = $minAmountNumbers[array_rand($minAmountNumbers)];
+				//echo"Zero bet exists";
+				//dd($result);
+            } 
+            else {
+                // Least amount winner
+                $result = $minAmountNumbers[0];
+				//echo"least_amount";
+				//dd($result);
+            }
+        }
+    }
+
+    // 7️⃣ Declare result
+    if (in_array($game_id, [1,2,3,4])) {
+        $this->colour_prediction_and_bingo($game_id, $period, $result);
+    } 
+    elseif (in_array($game_id, [6,7,8,9])) {
+        $this->trx($game_id, $period, $result);
+    } 
+}
+	public function cron($game_id)
+{
+    // 1️⃣ Game setting
+    $percentage = DB::table('game_settings')
+        ->where('id', $game_id)
+        ->value('winning_percentage');
+
+    // 2️⃣ Current period
+    $betlog = DB::table('betlogs')
+        ->where('game_id', $game_id)
+        ->first();
+
+    if (!$betlog) return;
+
+    $period = $betlog->games_no;
+
+    // 3️⃣ Total bet amount
+    $totalamount = DB::table('bets')
+        ->where('game_id', $game_id)
+        ->where('games_no', $period)
+        ->sum('amount');
+
+    // 4️⃣ Admin override
+    $adminWinner = DB::table('admin_winner_results')
+        ->where('gameId', $game_id)
+        ->where('gamesno', $period)
+        ->latest('id')
+        ->first();
+
+    if ($adminWinner) {
+        $result = $adminWinner->number;
+    } 
+    else {
+
+        // 🔹 Fetch betlogs
+        $betlogs = DB::table('betlogs')
+            ->where('game_id', $game_id)
+            ->where('games_no', $period)
+            ->get();
+
+        if ($betlogs->isEmpty()) return;
+
+        // 🔹 Positive bets only
+        $positiveBets = $betlogs->where('amount', '>', 0);
+
+        // 🔹 Min amount (>0)
+        $minAmount = $positiveBets->isNotEmpty()
+            ? $positiveBets->min('amount')
+            : null;
+
+        // 🔹 Min amount numbers
+        $minAmountNumbers = ($minAmount !== null)
+            ? $positiveBets->where('amount', $minAmount)->pluck('number')->toArray()
+            : [];
+
+        // 🔹 Zero amount numbers
+        $zeroAmountNumbers = $betlogs
+            ->where('amount', 0)
+            ->pluck('number')
+            ->toArray();
+
+        // 🔹 All numbers fallback (ultimate safety)
+        $allNumbers = $betlogs->pluck('number')->toArray();
+
+        // =========================
+        // 🎯 WINNING LOGIC
+        // =========================
+
+        if ($totalamount < 450) {
+
+            if (!empty($minAmountNumbers)) {
+                $result = $minAmountNumbers[array_rand($minAmountNumbers)];
+            } else {
+                $result = $allNumbers[array_rand($allNumbers)];
+            }
+
+        } else {
+
+            if ($minAmount !== null && $minAmount <= 50 && !empty($minAmountNumbers)) {
+
+                $result = $minAmountNumbers[array_rand($minAmountNumbers)];
+
+            } else {
+
+                if (!empty($zeroAmountNumbers)) {
+                    $result = $zeroAmountNumbers[array_rand($zeroAmountNumbers)];
+                } elseif (!empty($minAmountNumbers)) {
+                    $result = $minAmountNumbers[array_rand($minAmountNumbers)];
+                } else {
+                    $result = $allNumbers[array_rand($allNumbers)];
+                }
+            }
+        }
+    }
+
+    // 5️⃣ Declare result
+    if (in_array($game_id, [1,2,3,4])) {
+        $this->colour_prediction_and_bingo($game_id, $period, $result);
+    } 
+    elseif (in_array($game_id, [6,7,8,9])) {
+        $this->trx($game_id, $period, $result);
+    }
+}
+
+
 	private function colour_prediction_and_bingo($game_id, $period, $result)
+{
+    // 🔹 Check: same game_id + games_no already exists?
+    $exists = BetResult::where('game_id', $game_id)
+        ->where('games_no', $period)
+        ->exists();
+
+    if ($exists) {
+        // Agar already insert ho chuka hai, kuch mat karo
+        return false;
+    }
+
+    // 🔹 Fetch colours
+    $colours = VirtualGame::where('actual_number', $result)
+        ->where('game_id', $game_id)
+        ->where('multiplier', '!=', '1.5')
+        ->pluck('name');
+
+    $pdata = json_encode($colours);
+
+    // 🔹 Insert result
+    BetResult::create([
+        'number'      => $result,
+        'games_no'    => $period,
+        'game_id'     => $game_id,
+        'status'      => 1,
+        'json'        => $pdata,
+        'random_card' => $result
+    ]);
+
+    // 🔹 Amount distribution
+    $this->amountdistributioncolors($game_id, $period, $result);
+
+    // 🔹 Update bet logs
+    Betlog::where('game_id', $game_id)
+        ->update([
+            'amount' => 0,
+			'multiplier_amount' => 0,
+            'games_no' => \DB::raw('games_no + 1')
+        ]);
+
+    return true;
+}
+
+	
+	private function colour_prediction_and_bingo_07_01_2026($game_id, $period, $result)
 {
     //echo"$game_id,$period,$res";
     // Fetch the colours associated with the given game_id and result

@@ -66,6 +66,11 @@ use App\Http\Controllers\{
 
 use App\Http\Controllers\VipLevelController;
 
+Route::get('/animate_login', function () {
+    return view('admin/animate_login');
+});
+
+
 Route::get('/vip-levels', [VipLevelController::class, 'index'])->name('vip-levels.index');
 Route::get('/vip-levels/{id}/edit', [VipLevelController::class, 'edit'])->name('vip-levels.edit');
 Route::post('/vip-levels/{id}', [VipLevelController::class, 'update'])->name('vip-levels.update');
