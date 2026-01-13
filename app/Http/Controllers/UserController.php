@@ -66,20 +66,49 @@ public function illegalUsers()
            return redirect()->route('login');  
         }
   }
+	
+	
+	
+	public function user_create(Request $request)
+{
+    $value = $request->session()->has('id');
 
-    public function user_create(Request $request)
+    if(!empty($value))
+    {
+        $perPage = $request->get('per_page', 10); // items per page (default 8)
+
+        $users = DB::table('users as e')
+            ->leftJoin('users as m', 'e.referral_user_id', '=', 'm.id')
+            ->select('e.*', 'm.username as sname')
+            ->where('e.account_type', 0)
+            ->orderBy('e.id', 'desc')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        return view('user.index', compact('users'));
+    }
+    else {
+        return redirect()->route('login');
+    }
+}
+
+
+	
+	
+    public function user_create_13_01_2026(Request $request)
     {
 		$value = $request->session()->has('id');
 	
         if(!empty($value))
         {
 
-			$users = DB::select("
-    SELECT e.*, m.username AS sname 
-    FROM users e 
-    LEFT JOIN users m ON e.referral_user_id = m.id 
-    WHERE e.account_type = 0
-");
+			$users = DB::table('users as e')
+				->leftJoin('users as m', 'e.referral_user_id', '=', 'm.id')
+				->where('e.account_type', 0)
+				->select('e.*', 'm.username as sname')
+				->orderBy('e.id', 'desc')
+				->paginate(10);   // 🔥 ONLY 10 USERS AT A TIME
+
 
 		//$users = DB::table('user')->latest()->get();
         
