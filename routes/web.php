@@ -61,14 +61,27 @@ use App\Http\Controllers\{
 	UserSalaryController,
 	GiftController,
 	UserManualUsdtController,
-	JilliGameBetController
+	JilliGameBetController,
+	AdminDashboardController,GameSettingController
 };
 
+
 use App\Http\Controllers\VipLevelController;
+
+
+Route::get('/admin/wingo/settings', [GameSettingController::class, 'index']);
+Route::post('/admin/wingo/update-percentage', [GameSettingController::class, 'updatePercentage']);
+Route::post('/admin/wingo/update-status', [GameSettingController::class, 'updateStatus']);
+
+
 
 Route::get('/animate_login', function () {
     return view('admin/animate_login');
 });
+
+
+Route::get('/admin/user-dashboard', [AdminDashboardController::class, 'userDashboard'])
+    ->name('admin.user.dashboard');
 
 
 Route::get('/vip-levels', [VipLevelController::class, 'index'])->name('vip-levels.index');

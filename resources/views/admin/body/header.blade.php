@@ -2,7 +2,7 @@
 
 }else{
 	
-	header("Location: https://stack.mobileappdemo.net/");
+	header("Location: https://root.pasawin.com/");
             die; 
 
 } 
@@ -16,7 +16,7 @@
              <button type="button" id="sidebarCollapse" class="sidebar_toggle"><i class="fa fa-bars"></i></button>
              <div class="logo_section">
                 {{--<h3 class="img-responsive text-white mt-2 ml-2" ><?php echo data($conn,4)?></h3>--}}
-                <a href="index.html"><img class="img-responsive" src="https://stack.mobileappdemo.net/assets/pasawin-logo.png" alt="#" style="height: 55px;" /></a>
+                <a href="index.html"><img class="img-responsive" src="https://root.pasawin.com/assets/pasawin-logo.png" alt="#" style="height: 55px;" /></a>
              </div>
              <div class="right_topbar">
                 <div class="icon_info">

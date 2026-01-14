@@ -1125,13 +1125,20 @@ public function bet_history(Request $request)
     /* ============================================================
        STEP 9: APPLY RESULT
        ============================================================ */
-
+//dd($result);
     if (in_array($game_id, [1, 2, 3, 4])) {
         $this->colour_prediction_and_bingo($game_id, $period, $result);
     } elseif (in_array($game_id, [6, 7, 8, 9])) {
         $this->trx($game_id, $period, $result);
     }
 }
+	
+	///////////Cron End ////////////////////////////////
+	
+	
+	
+	
+	
 
 	public function cron_13_01_2026($game_id)
 {
@@ -1346,12 +1353,13 @@ public function bet_history(Request $request)
             ->value('number');
     }
 
-
+dd($result);
     /* ============================================================
        STEP 9: APPLY RESULT
        ============================================================ */
 
     if (in_array($game_id, [1,2,3,4])) {
+		
         $this->colour_prediction_and_bingo($game_id, $period, $result);
     } elseif (in_array($game_id, [6,7,8,9])) {
         $this->trx($game_id, $period, $result);

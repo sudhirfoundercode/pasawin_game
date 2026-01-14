@@ -70,7 +70,16 @@
           <li class="{{ Request::routeIs('users') ? 'active' : '' }}"><a href="{{route('users')}}"><i class="fa fa-user orange_color"></i> <span>Players</span></a></li>
           <!--<li class="{{ Request::routeIs('fund_transfer') ? 'active' : '' }}"><a href="{{route('fund_transfer')}}"><i class="fa-solid fa-money-bill-transfer red_color"></i> <span>Fund Transfer</span></a></li>-->
 			 <!--<li class="{{ Request::routeIs('vip-levels.index') ? 'active' : '' }}"><a href="{{route('vip-levels.index')}}"><i class="fa fa-user red_color"></i> <span>VIP Levels</span></a></li>-->
-			
+			{{-- ================= USER WISE DASHBOARD ================= --}}
+   <!-- <li class="{{ Request::routeIs('admin.user.dashboard') ? 'active' : '' }}">
+        <a href="{{ route('admin.user.dashboard') }}">
+            <i class="fa fa-users dark_color"></i>
+            <span>User Wise Dashboard</span>
+            <span class="badge bg-danger pull-right">LIVE</span>
+        </a>
+    </li>-->
+
+
           
           <li class="{{ Request::routeIs('admin.illegalUsers') ? 'active' : '' }}"><a href="{{route('admin.illegalUsers')}}"><i class="fa-solid fa-user-shield orange_color"></i> <span>Illegal User Bet</span></a></li>
           
@@ -98,6 +107,14 @@
                   </a>
               </li>
           @endif
+<li class="nav-item">
+    <a href="{{ url('/admin/wingo/settings')  }}"
+       class="nav-link {{ request()->is('admin/wingo*') ? 'active' : '' }}">
+        <i class="fas fa-gamepad"></i>
+        <p style="color:white;">Wingo Settings</p>
+    </a>
+</li>
+
 
           <li class="{{ Request::routeIs('wingo.show.form') ? 'active' : '' }}">
            <a href="{{ route('wingo.show.form') }}">
