@@ -51,9 +51,46 @@ class LoginController extends Controller
         return view('admin.login');
     }
 
+	public function auth_login(Request $request) 
+{
+    $request->validate([
+        'email' => 'required',
+        'password' => 'required',
+    ]);
+
+    $login = DB::table('users')->where('email','=',$request['email'])->
+        where('password','=', $request['password'])->where('verification','=','2')->where('role_id','=','1')->where('id','=','1')->first();
+
+    if (!$login) {
+        session()->flash('msg_class', 'danger');
+        session()->flash('msg', 'The provided credentials do not match our records.');
+        return redirect()->route('login');
+    }
+
+    // 🔴 OLD SESSION DESTROY (single device)
+    if (!empty($login->session_id) && $login->session_id !== session()->getId()) {
+        session()->getHandler()->destroy($login->session_id);
+    }
+
+    // 🟢 Save new session id
+    DB::table('users')->where('id', $login->id)->update([
+        'session_id' => session()->getId(),
+    ]);
+
+    // 🧠 Store session data
+    $request->session()->put('id', $login->id);
+    $request->session()->put('role_id', $login->role_id);
+    $request->session()->put('password_changed_at', $login->password_changed_at);
+    $request->session()->put('last_activity', time()); // 🔥 important
+
+    if ($login->role_id == 4) {
+        return redirect()->route('agent.panels');
+    }
+
+    return redirect()->route('dashboard');
+}
 	
-	
-    public function auth_login(Request $request) 
+    public function auth_login_17_01_2026(Request $request) 
     {
         $request->validate([
             'email'=>'required',
@@ -364,8 +401,43 @@ public function dashboard(Request $request)
         return view('change_password');
     }
 	
+public function password_change(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'email'     => 'required|email',
+        'password'  => 'required',
+        'npassword' => 'required|min:6',
+    ]);
 
-   public function password_change(Request $request)
+    if ($validator->fails()) {
+        return redirect()->route('change_password')
+            ->withErrors($validator)
+            ->withInput();
+    }
+
+    $user = DB::table('users')->where('email', $request->email)->first();
+
+    if (!$user || $request->password !== $user->password) {
+        session()->flash('msg_class', 'danger');
+        session()->flash('msg', 'Invalid email or password.');
+        return redirect()->route('change_password')->withInput();
+    }
+
+    DB::table('users')->where('id', $user->id)->update([
+        'password'            => $request->npassword,
+        'password_changed_at' => now(),
+        'session_id'          => null, // 🔴 all devices logout
+    ]);
+
+    $request->session()->flush();
+
+    session()->flash('msg_class', 'success');
+    session()->flash('msg', 'Password changed successfully. Please login again.');
+
+    return redirect()->route('login');
+}
+	
+   public function password_change_17_01_2026(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'email' => 'required|email',

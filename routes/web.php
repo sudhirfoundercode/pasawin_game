@@ -69,6 +69,16 @@ use App\Http\Controllers\{
 use App\Http\Controllers\VipLevelController;
 
 
+Route::get('/',[LoginController::class,'login'])->name('login');
+Route::post('/login',[LoginController::class,'auth_login'])->name('auth.login');
+// register
+    Route::get('/register',[LoginController::class,'register_create'])->name('register');
+    Route::post('/register',[LoginController::class,'register_store'])->name('register.store');
+    
+	Route::middleware(['check.session', 'session.timeout','user.login'])->group(function () {
+			  
+
+
 Route::get('/admin/wingo/settings', [GameSettingController::class, 'index']);
 Route::post('/admin/wingo/update-percentage', [GameSettingController::class, 'updatePercentage']);
 Route::post('/admin/wingo/update-status', [GameSettingController::class, 'updateStatus']);
@@ -135,13 +145,6 @@ Route::any('/user-all-details/{user_id}', [UserController::class, 'all_details']
 
 
 Route::get('/bank_details', [UserController::class, 'bank_details'])->name('bank_details');
-
-
-
-
-
-
-
 
 Route::any('/filterSubordinatedata/{id}', [UserController::class, 'filterSubordinateData'])->name('filterSubordinateData');
 Route::post('/updatePassword',[PublicApiController::class,'updatePassword']);
@@ -348,21 +351,8 @@ Route::get('/clear', function() {
 
 });
 
-
- 
-Route::get('/',[LoginController::class,'login'])->name('login');
-Route::post('/login',[LoginController::class,'auth_login'])->name('auth.login');
-
 Route::get('/dashboard',[LoginController::class,'dashboard'])->name('dashboard');
 
- 
-        
- 
-
-// register
-    Route::get('/register',[LoginController::class,'register_create'])->name('register');
-    Route::post('/register',[LoginController::class,'register_store'])->name('register.store');
-    
 // Route::middleware(['auth'])->group(function () {
 
 
@@ -633,6 +623,6 @@ Route::post('/wingo/pattern/delete/{id}', [WingoResultController::class, 'delete
       Route::get('/success_check', function () {
         return view('success');
     })->name('success_check');
-
+	});	
 
 

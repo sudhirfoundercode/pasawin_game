@@ -80,16 +80,33 @@ class AgencyPromotionController extends Controller
          //     AND u.referral_user_id = ?
        //       AND u.created_at LIKE ?
       //  ", [$user_id, $currentDate . '%']);
+		
+// Direct downline first deposit
+        //$first_deposit = \DB::select("
+         //   SELECT COUNT(p.id) AS first_deposit
+         //   FROM payins p
+         //   JOIN users u ON p.user_id = u.id
+         //   WHERE u.referral_user_id = ?
+         //     AND u.created_at LIKE ?
+          //    AND u.salary_first_recharge = '0'
+        //", [$user_id, $currentDate . '%']);
 
         // Direct downline first deposit
         $first_deposit = \DB::select("
-            SELECT COUNT(p.id) AS first_deposit
-            FROM payins p
-            JOIN users u ON p.user_id = u.id
-            WHERE u.referral_user_id = ?
-              AND u.created_at LIKE ?
-              AND u.salary_first_recharge = '0'
-        ", [$user_id, $currentDate . '%']);
+    SELECT COUNT(*) AS first_deposit
+    FROM users u
+    JOIN (
+        SELECT p.user_id, COUNT(*) AS total_success, MAX(DATE(p.created_at)) AS last_payin_date
+        FROM payins p
+        WHERE p.status = 2
+        GROUP BY p.user_id
+        HAVING COUNT(*) = 1 -- lifetime me sirf 1 successful payin
+           AND MAX(DATE(p.created_at)) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) -- wo payin yesterday ka ho
+    ) t ON u.id = t.user_id
+    WHERE u.referral_user_id = ?
+", [$user_id]);
+
+//dd($first_deposit_count[0]->first_deposit);
 
         // ALL subordinates register (unlimited levels)
         $subordinates_register = \DB::select("
@@ -133,24 +150,33 @@ class AgencyPromotionController extends Controller
 
         // ALL subordinates first deposit (unlimited levels)
         $subordinates_first_deposit = \DB::select("
-            WITH RECURSIVE subordinates AS (
-                SELECT id
-                FROM users
-                WHERE referral_user_id = ?
+    WITH RECURSIVE subordinates AS (
+        SELECT id, 1 AS level
+        FROM users
+        WHERE referral_user_id = ?
 
-                UNION ALL
+        UNION ALL
 
-                SELECT u.id
-                FROM users u
-                INNER JOIN subordinates s ON s.id = u.referral_user_id
-            )
-            SELECT COUNT(p.id) AS first_deposit
-            FROM payins p
-            JOIN users u ON p.user_id = u.id
-            WHERE u.id IN (SELECT id FROM subordinates)
-              AND p.created_at LIKE ?
-              AND u.salary_first_recharge = '0'
-        ", [$user_id, $currentDate . '%']);
+        SELECT u.id, s.level + 1
+        FROM users u
+        INNER JOIN subordinates s ON s.id = u.referral_user_id
+    )
+    SELECT COUNT(*) AS first_deposit
+    FROM users u
+    JOIN (
+        SELECT p.user_id
+        FROM payins p
+        WHERE p.status = 2
+        GROUP BY p.user_id
+        HAVING COUNT(*) = 1 -- lifetime me sirf 1 successful payin
+           AND MAX(DATE(p.created_at)) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) -- wo payin yesterday ka ho
+    ) t ON u.id = t.user_id
+    WHERE u.id IN (SELECT id FROM subordinates)
+      
+", [$user_id]);
+
+//dd($subordinates_first_deposit[0]->first_deposit);
+
 
         // Final result
         $result = [

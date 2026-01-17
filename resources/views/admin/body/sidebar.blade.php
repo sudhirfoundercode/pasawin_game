@@ -180,7 +180,7 @@
           <!-- Gift Redeemed History -->
           <li class="{{ Request::routeIs('giftredeemed') ? 'active' : '' }}"><a href="{{route('giftredeemed')}}"><i class="fa fa-credit-card dark_color"></i> <span>Gift Redeemed History</span></a></li>
           <!-- Activity & Banner -->
-          <li class="{{ Request::routeIs('banner') ? 'active' : '' }}"><a href="{{route('banner')}}"><i class="fa fa-picture-o dark_color"></i> <span>Banner</span></a></li>
+          <!--<li class="{{ Request::routeIs('banner') ? 'active' : '' }}"><a href="{{route('banner')}}"><i class="fa fa-picture-o dark_color"></i> <span>Banner</span></a></li>-->
           <!-- Feedback -->
           <li class="{{ Request::routeIs('feedback') ? 'active' : '' }}"><a href="{{route('feedback')}}"><i class="fa fa-file blue1_color"></i> <span>Feedback</span></a></li>
 
