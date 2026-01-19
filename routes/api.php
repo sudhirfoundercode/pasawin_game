@@ -120,12 +120,12 @@ Route::get('/calculate_all_salaries', [SalaryApiController::class, 'calculateAll
 
 
 Route::controller(Lucky12GameApiController::class)->group(function () {
-    //Route::get('/lucky12_result','lucky12_result_store');
+    
     Route::post('/lucky12/bet', 'lucky12Bet');
     Route::get('/lucky12/bet_history', 'lucky12BetHistory');
     Route::get('/lucky12/result', 'lucky12BetResult');
     //Route::get('/lucky_12_admin', 'lucky_12_adminpanel');
-    //Route::post('/point_details', 'point_details');
+    
     
     Route::get('/lucky12-betlogs', 'getLatestBetLogs');
     Route::get('/lucky12-betlogs-amount', 'getLatestBetLogsAmount');

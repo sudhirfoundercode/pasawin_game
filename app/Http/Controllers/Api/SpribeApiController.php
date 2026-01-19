@@ -96,11 +96,12 @@ class SpribeApiController extends Controller
 			$ENCRYPTED = ENCRYPT_PAYLOAD_ECB($PAYLOAD, $SECRET);
 
 			// Step 6: Send it to the SoftAPI server
-		 	   $URL = $SERVER_URL . "?payload=" . urlencode($ENCRYPTED) . "&token=" . urlencode($TOKEN);
+		 	   echo $URL = $SERVER_URL . "?payload=" . urlencode($ENCRYPTED) . "&token=" . urlencode($TOKEN);
 
 			$CH = curl_init($URL);
 			curl_setopt($CH, CURLOPT_RETURNTRANSFER, true);
 		 	  $RESPONSE = curl_exec($CH);
+		//echo $RESPONSE; die;
 			curl_close($CH);
 		
 			// Step 7: Decode the response

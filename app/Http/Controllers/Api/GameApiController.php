@@ -909,8 +909,214 @@ public function bet_history(Request $request)
     }
 }
 
-
 	public function cron($game_id)
+{
+    /* ============================================================
+       STEP 1: BASIC GAME DATA
+       ============================================================ */
+
+    $gameSetting = DB::table('game_settings')
+        ->where('id', $game_id)
+        ->where('status', 1)
+        ->first();
+
+    $percentage = $gameSetting ? $gameSetting->winning_percentage : null;
+
+    $game_no = DB::table('betlogs')
+        ->where('game_id', $game_id)
+        ->value('games_no');
+
+    if (!$game_no) {
+        return;
+    }
+
+    $period = $game_no;
+
+    $totalamount = DB::table('bets')
+        ->where('game_id', $game_id)
+        ->where('games_no', $game_no)
+        ->sum('amount');
+
+    $max_payout = null;
+    if ($percentage !== null) {
+        $max_payout = ($totalamount * $percentage) / 100;
+    }
+
+    $minmax = DB::table('betlogs')
+        ->where('game_id', $game_id)
+        ->selectRaw('MIN(number) as min, MAX(number) as max')
+        ->first();
+
+    /* ============================================================
+       STEP 2: ADMIN MANUAL RESULT
+       ============================================================ */
+
+    $adminWinner = DB::table('admin_winner_results')
+        ->where('gamesno', $game_no)
+        ->where('gameId', $game_id)
+        ->latest()
+        ->first();
+
+    /* ============================================================
+       STEP 3: CONFIG
+       ============================================================ */
+
+    $VIP_DEPOSIT_LIMIT = 10000;
+    $MAX_WIN_AMOUNT   = 300;
+    $CHECK_GAMES      = 3;
+    $BLOCK_WIN_COUNT  = 2;
+    $SAFE_WIN_CHANCE  = 20;
+
+    /* ============================================================
+       STEP 4: VIP USERS
+       ============================================================ */
+
+    $vipUsers = DB::select("
+        SELECT user_id
+        FROM payins
+        WHERE status = 2
+        GROUP BY user_id
+        HAVING SUM(cash) >= $VIP_DEPOSIT_LIMIT
+    ");
+
+    $vipUserIds = array_map(fn($u) => $u->user_id, $vipUsers);
+
+    /* ============================================================
+       STEP 5: BLOCKED USERS
+       ============================================================ */
+
+    $blockedUsers = [];
+
+    $highWinUsers = DB::select("
+        SELECT DISTINCT userid
+        FROM bets
+        WHERE game_id = '$game_id'
+          AND status = 1
+          AND win_amount > $MAX_WIN_AMOUNT
+          AND games_no = ($game_no - 1)
+          AND userid NOT IN (" . implode(',', $vipUserIds ?: [0]) . ")
+    ");
+
+    foreach ($highWinUsers as $u) {
+        $blockedUsers[] = $u->userid;
+    }
+
+    $continuousWinUsers = DB::select("
+        SELECT userid
+        FROM bets
+        WHERE game_id = '$game_id'
+          AND status = 1
+          AND games_no >= ($game_no - $CHECK_GAMES)
+          AND userid NOT IN (" . implode(',', $vipUserIds ?: [0]) . ")
+        GROUP BY userid
+        HAVING COUNT(*) >= $BLOCK_WIN_COUNT
+    ");
+
+    foreach ($continuousWinUsers as $u) {
+        $blockedUsers[] = $u->userid;
+    }
+
+    $blockedUsers = array_unique($blockedUsers);
+
+    /* ============================================================
+       STEP 6: BLOCKED NUMBERS
+       ============================================================ */
+
+    $blockedNumbers = [];
+
+    if (!empty($blockedUsers)) {
+        $blockedNumbers = DB::table('bets')
+            ->where('game_id', $game_id)
+            ->where('games_no', $game_no)
+            ->whereIn('userid', $blockedUsers)
+            ->pluck('number')
+            ->toArray();
+    }
+
+    /* ============================================================
+       STEP 7: SAFE BET
+       ============================================================ */
+
+    $safeBet = null;
+
+    if ($max_payout !== null) {
+        $safeBet = DB::table('betlogs')
+            ->where('game_id', $game_id)
+            ->where('games_no', $game_no)
+            ->where('amount', '<=', $max_payout)
+            ->orderBy('multiplier_amount', 'asc')
+            ->first();
+    }
+
+    /* ============================================================
+       STEP 8: FINAL RESULT
+       ============================================================ */
+
+    if ($adminWinner) {
+
+        $result = $adminWinner->number;
+
+    } elseif (!empty($blockedNumbers)) {
+
+        $result = DB::table('betlogs')
+            ->where('game_id', $game_id)
+            ->where('games_no', $game_no)
+            ->whereNotIn('number', $blockedNumbers)
+            ->where('multiplier_amount', 0)
+            ->inRandomOrder()
+            ->value('number');
+
+        /* 🔥 FIX: agar sab numbers blocked ho gaye */
+        if ($result === null) {
+            $result = DB::table('bets')
+                ->where('game_id', $game_id)
+                ->where('games_no', $game_no)
+                ->whereIn('number', $blockedNumbers)
+                ->selectRaw('number, SUM(amount) as total_amount')
+                ->groupBy('number')
+                ->orderBy('total_amount', 'asc')
+                ->value('number');
+        }
+
+    } elseif ($totalamount < 450) {
+
+        $result = rand($minmax->min, $minmax->max);
+
+    } elseif ($percentage !== null && $safeBet && rand(1, 100) <= $SAFE_WIN_CHANCE) {
+
+        $result = $safeBet->number;
+
+    } else {
+
+        $result = DB::table('betlogs')
+            ->where('game_id', $game_id)
+            ->where('games_no', $game_no)
+            ->where('multiplier_amount', 0)
+            ->inRandomOrder()
+            ->value('number');
+    }
+
+    /* ============================================================
+       STEP 9: FINAL FAIL SAFE
+       ============================================================ */
+
+    if ($result === null) {
+        $result = rand($minmax->min, $minmax->max);
+    }
+
+    /* ============================================================
+       STEP 10: APPLY RESULT
+       ============================================================ */
+
+    if (in_array($game_id, [1, 2, 3, 4])) {
+        $this->colour_prediction_and_bingo($game_id, $period, $result);
+    } elseif (in_array($game_id, [6, 7, 8, 9])) {
+        $this->trx($game_id, $period, $result);
+    }
+}
+
+
+	public function cron_19_01_2026($game_id)
 {
     /* ============================================================
        STEP 1: BASIC GAME DATA
